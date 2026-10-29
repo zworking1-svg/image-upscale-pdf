@@ -35,31 +35,39 @@ drop.ondragleave = () => drop.classList.remove('over');
 drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); };
 fileInput.onchange = () => fileInput.files[0] && loadFile(fileInput.files[0]);
 
+const OPEN_ERROR = 'Не удалось открыть файл. Поддерживаются JPG, PNG, WEBP, BMP, GIF, AVIF.';
+
+function baseName(file) { return file.name.replace(/\.[^.]+$/, '') || 'image'; }
+
+async function fileToCanvas(file) {
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+  const c = document.createElement('canvas');
+  c.width = bmp.width; c.height = bmp.height;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);   // прозрачность → белый фон
+  ctx.drawImage(bmp, 0, 0);
+  bmp.close();
+  return c;
+}
+
 function show(el, on = true) { el.classList.toggle('hidden', !on); }
 function enable(id, on = true) { $(id).classList.toggle('disabled', !on); }
 
 async function loadFile(file) {
   const info = $('uploadInfo');
   show(info); info.className = 'muted'; info.textContent = 'Открываю ' + file.name + '…';
-  enable('s2', false); enable('s3', false);
+  enable('s2', false);
   outCanvas = null;
   show($('pvAfter'), false); $('capAfter').textContent = ''; show($('dlRow'), false); show($('detailWrap'), false);
   show($('progressWrap'), false); show($('upErr'), false);
-  let bmp;
   try {
-    bmp = await createImageBitmap(file, { imageOrientation: 'from-image' });
+    srcCanvas = await fileToCanvas(file);
   } catch {
-    info.className = 'err'; info.textContent = 'Не удалось открыть файл. Поддерживаются JPG, PNG, WEBP, BMP, GIF, AVIF.';
+    info.className = 'err'; info.textContent = OPEN_ERROR;
     return;
   }
-  const w = bmp.width, h = bmp.height;
-  srcCanvas = document.createElement('canvas');
-  srcCanvas.width = w; srcCanvas.height = h;
-  const ctx = srcCanvas.getContext('2d');
-  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, w, h);   // прозрачность → белый фон
-  ctx.drawImage(bmp, 0, 0);
-  bmp.close();
-  fileName = file.name.replace(/\.[^.]+$/, '') || 'image';
+  const w = srcCanvas.width, h = srcCanvas.height;
+  fileName = baseName(file);
 
   const tooBig = w * h * SCALE * SCALE > MAX_OUT_PIXELS;
   info.textContent = `${file.name} · ${w}×${h} px → после увеличения ${w * SCALE}×${h * SCALE} px`;
@@ -72,7 +80,7 @@ async function loadFile(file) {
     enable('s2');
   }
   enable('s3');
-  $('source').value = 'original';
+  if ($('source').value !== 'file') $('source').value = 'original';
   updateDpi();
 }
 
@@ -246,37 +254,68 @@ function pageLayout(size) {
   return { pw, ph, w, h, x: (pw - w) / 2, y: (ph - h) / 2 };
 }
 
+// Картинка с компьютера специально для PDF (без увеличения)
+let pdfCanvas = null, pdfFileName = 'image';
+$('pdfFileBtn').onclick = () => $('pdfFile').click();
+$('pdfFile').onchange = async () => {
+  const file = $('pdfFile').files[0];
+  if (!file) return;
+  const info = $('pdfFileInfo');
+  info.className = 'muted'; info.textContent = 'Открываю…';
+  try {
+    pdfCanvas = await fileToCanvas(file);
+  } catch {
+    info.className = 'err'; info.textContent = OPEN_ERROR;
+    return;
+  }
+  pdfFileName = baseName(file);
+  info.textContent = `${file.name} · ${pdfCanvas.width}×${pdfCanvas.height} px`;
+  $('source').value = 'file';
+  updateDpi();
+  $('pdfFile').value = '';
+};
+
 function currentSource() {
-  return $('source').value === 'upscaled' ? outCanvas : srcCanvas;
+  return { upscaled: outCanvas, original: srcCanvas, file: pdfCanvas }[$('source').value];
 }
 
 function updateDpi() {
   const el = $('dpi');
   const src = currentSource();
-  if (!src) { el.innerHTML = '<span class="warn">Сначала увеличьте картинку (шаг 2) — или выберите источник «Оригинал».</span>'; return; }
+  if (!src) {
+    const msg = {
+      upscaled: 'Сначала загрузите и увеличьте картинку (шаги 1–2) — или выберите картинку с компьютера кнопкой выше.',
+      original: 'Сначала загрузите картинку на шаге 1 — или выберите картинку с компьютера кнопкой выше.',
+      file: 'Нажмите «Выбрать картинку с компьютера для PDF».',
+    }[$('source').value];
+    el.innerHTML = `<span class="warn">${msg}</span>`;
+    return;
+  }
   const L = pageLayout([src.width, src.height]);
   const dpi = Math.round(Math.min(src.width / (L.w / 25.4), src.height / (L.h / 25.4)));
   let verdict;
   if (dpi >= 300) verdict = '<span class="ok">✓ Отлично для типографии (300+ DPI)</span>';
   else if (dpi >= 200) verdict = '<span class="warn">Хорошо — печать будет качественной, но не идеальной</span>';
   else verdict = '<span class="err">Низкое разрешение — на печати будет заметна размытость</span>';
-  el.innerHTML = `Лист ${L.pw}×${L.ph} мм · разрешение при печати ≈ <b>${dpi} DPI</b> · ${verdict}`;
+  el.innerHTML = `В PDF: ${src.width}×${src.height} px · лист ${L.pw}×${L.ph} мм · разрешение при печати ≈ <b>${dpi} DPI</b> · ${verdict}`;
 }
 ['paper', 'orientation', 'fit', 'margin', 'source'].forEach(id => $(id).addEventListener('input', updateDpi));
 
 $('pdfBtn').onclick = async () => {
   const src = currentSource();
   if (!src) { updateDpi(); return; }
+  const name = $('source').value === 'file' ? pdfFileName : fileName;
   const btn = $('pdfBtn'); btn.disabled = true; btn.textContent = 'Создаю PDF…'; show($('pdfErr'), false);
   try {
     const L = pageLayout([src.width, src.height]);
     const jpeg = new Uint8Array(await (await canvasBlob(src, 'image/jpeg', 0.95)).arrayBuffer());
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ orientation: L.pw > L.ph ? 'landscape' : 'portrait', unit: 'mm', format: [L.pw, L.ph] });
-    doc.setProperties({ title: fileName });
+    doc.setProperties({ title: name });
     // JPEG встраивается как есть, без повторного сжатия
     doc.addImage(jpeg, 'JPEG', L.x, L.y, L.w, L.h, undefined, 'NONE');
-    saveBlob(doc.output('blob'), `${fileName}_${$('paper').value}.pdf`);
+    saveBlob(doc.output('blob'), `${name}_${$('paper').value}.pdf`);
   } catch (e) { $('pdfErr').textContent = 'Ошибка: ' + e.message; show($('pdfErr')); }
   btn.disabled = false; btn.textContent = 'Скачать PDF';
 };
+updateDpi();
