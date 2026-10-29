@@ -1,6 +1,7 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "upscale-site", "runtimeExecutable": ".venv/Scripts/python.exe", "runtimeArgs": ["app.py"], "port": 5000 }
+    { "name": "upscale-site", "runtimeExecutable": ".venv/Scripts/python.exe", "runtimeArgs": ["app.py"], "port": 5000 },
+    { "name": "web-static", "runtimeExecutable": ".venv/Scripts/python.exe", "runtimeArgs": ["-m", "http.server", "8080", "-d", "web"], "port": 8080 }
   ]
 }
