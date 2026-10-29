@@ -104,8 +104,14 @@
     </div>
   </section>
 
-  <section class="card disabled" id="s3">
+  <section class="card" id="s3">
     <h2 class="step"><span class="num">3</span>Конвертируйте в PDF</h2>
+    <p class="muted" style="margin:-6px 0 14px">В PDF попадает картинка в полном размере — по умолчанию увеличенная ×4. Можно также выбрать любую другую картинку с компьютера.</p>
+    <div class="row" style="margin-bottom:16px">
+      <button class="ghost" id="pdfFileBtn">Выбрать картинку с компьютера для PDF</button>
+      <span class="muted" id="pdfFileInfo"></span>
+    </div>
+    <input type="file" id="pdfFile" accept="image/*" hidden>
     <div class="grid">
       <div>
         <label for="paper">Формат листа</label>
@@ -140,6 +146,7 @@
         <select id="source">
           <option value="upscaled">Увеличенная картинка</option>
           <option value="original">Оригинал (без увеличения)</option>
+          <option value="file">Картинка с компьютера (выбрать выше)</option>
         </select>
       </div>
     </div>
