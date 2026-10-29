@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Улучшение и печать</title>
+<meta name="description" content="Увеличение картинки в 4 раза нейросетью Real-ESRGAN (как в Upscayl) и PDF формата A3 для типографии. Всё работает в браузере.">
+<style>
+  :root {
+    --bg: #f4f2ee; --card: #ffffff; --ink: #1d1d1f; --muted: #6b6b70; --line: #e3e0da;
+    --accent: #c2410c; --accent-ink: #fff; --ok: #15803d; --warn: #b45309; --err: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151517; --card: #1f1f22; --ink: #f2f2f3; --muted: #9a9aa2; --line: #2e2e33;
+            --accent: #f97316; --accent-ink: #1a0d04; --ok: #4ade80; --warn: #fbbf24; --err: #f87171; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0 0 20px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px; margin-bottom: 18px; }
+  .card.disabled { opacity: .45; pointer-events: none; }
+  .step { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 18px; }
+  .num { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
+         display: grid; place-items: center; font-weight: 700; font-size: 14px; flex: none; }
+  .drop { border: 2px dashed var(--line); border-radius: 12px; padding: 36px 16px; text-align: center; cursor: pointer;
+          transition: border-color .15s, background .15s; }
+  .drop.over, .drop:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+  .drop b { color: var(--accent); }
+  .muted { color: var(--muted); font-size: 14px; }
+  .note { font-size: 14px; padding: 10px 14px; border-radius: 10px; background: var(--card); border: 1px solid var(--line); margin-bottom: 18px; }
+  label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+  select, input[type=number] { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+          background: var(--bg); color: var(--ink); font: inherit; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 16px; }
+  button { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 10px; padding: 12px 22px;
+           font: inherit; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  button.ghost { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .bar { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 14px 0 6px; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+  @media (max-width: 640px) { .compare { grid-template-columns: 1fr; } }
+  figure { margin: 0; }
+  figure canvas, figure img { width: 100%; height: auto; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); display: block; }
+  figcaption { font-size: 14px; color: var(--muted); margin-top: 6px; }
+  .dpi { padding: 12px 14px; border-radius: 10px; background: var(--bg); font-size: 15px; margin-bottom: 16px; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .err { color: var(--err); }
+  .hidden { display: none !important; }
+  footer { color: var(--muted); font-size: 13px; text-align: center; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Улучшение картинки и PDF для печати</h1>
+  <p class="sub">Загрузите картинку → увеличьте в 4 раза нейросетью Real-ESRGAN (на ней работает Upscayl) → получите PDF формата A3 для типографии.</p>
+  <div class="note" id="envNote">Проверяю браузер…</div>
+
+  <section class="card" id="s1">
+    <h2 class="step"><span class="num">1</span>Загрузите картинку</h2>
+    <div class="drop" id="drop">
+      <div>Перетащите файл сюда или <b>выберите на компьютере</b></div>
+      <div class="muted">JPG, PNG, WEBP, BMP, GIF, AVIF · картинка не покидает ваш компьютер</div>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <p class="muted hidden" id="uploadInfo"></p>
+  </section>
+
+  <section class="card disabled" id="s2">
+    <h2 class="step"><span class="num">2</span>Увеличьте в 4 раза</h2>
+    <div class="grid">
+      <div>
+        <label for="model">Модель нейросети</label>
+        <select id="model">
+          <option value="realesrgan-x4plus">Максимальное качество — фото и картинки (67 МБ)</option>
+          <option value="realesr-general-x4v3">Быстрая — хорошо для любых картинок (5 МБ)</option>
+          <option value="realesrgan-x4plus-anime">Рисунки, иллюстрации, аниме (18 МБ)</option>
+        </select>
+      </div>
+    </div>
+    <div class="row">
+      <button id="upBtn">Улучшить ×4</button>
+      <button id="stopBtn" class="ghost hidden">Остановить</button>
+    </div>
+    <div id="progressWrap" class="hidden">
+      <div class="bar"><i id="bar"></i></div>
+      <div class="muted" id="progressText"></div>
+    </div>
+    <p class="err hidden" id="upErr"></p>
+    <div class="compare">
+      <figure><canvas id="pvBefore" class="hidden"></canvas><figcaption id="capBefore"></figcaption></figure>
+      <figure><canvas id="pvAfter" class="hidden"></canvas><figcaption id="capAfter"></figcaption></figure>
+    </div>
+    <div class="compare hidden" id="detailWrap">
+      <figure><canvas id="dtBefore"></canvas><figcaption>Фрагмент: было</figcaption></figure>
+      <figure><canvas id="dtAfter"></canvas><figcaption>Фрагмент: стало</figcaption></figure>
+    </div>
+    <div class="row hidden" id="dlRow" style="margin-top:14px">
+      <button class="ghost" id="dlPng">Скачать увеличенную картинку (PNG)</button>
+    </div>
+  </section>
+
+  <section class="card disabled" id="s3">
+    <h2 class="step"><span class="num">3</span>Конвертируйте в PDF</h2>
+    <div class="grid">
+      <div>
+        <label for="paper">Формат листа</label>
+        <select id="paper">
+          <option value="A4">A4 — 210×297 мм</option>
+          <option value="A3" selected>A3 — 297×420 мм</option>
+          <option value="A2">A2 — 420×594 мм</option>
+        </select>
+      </div>
+      <div>
+        <label for="orientation">Ориентация</label>
+        <select id="orientation">
+          <option value="auto">Автоматически (по картинке)</option>
+          <option value="portrait">Книжная</option>
+          <option value="landscape">Альбомная</option>
+        </select>
+      </div>
+      <div>
+        <label for="fit">Размещение</label>
+        <select id="fit">
+          <option value="into">Вписать целиком (без обрезки)</option>
+          <option value="fill">Заполнить лист (с обрезкой краёв)</option>
+          <option value="exact">Растянуть на весь лист</option>
+        </select>
+      </div>
+      <div>
+        <label for="margin">Поля, мм</label>
+        <input type="number" id="margin" value="0" min="0" max="50" step="1">
+      </div>
+      <div>
+        <label for="source">Источник</label>
+        <select id="source">
+          <option value="upscaled">Увеличенная картинка</option>
+          <option value="original">Оригинал (без увеличения)</option>
+        </select>
+      </div>
+    </div>
+    <div class="dpi" id="dpi"></div>
+    <button id="pdfBtn">Скачать PDF</button>
+    <p class="err hidden" id="pdfErr"></p>
+  </section>
+
+  <footer>Нейросети: <a href="https://github.com/xinntao/Real-ESRGAN">Real-ESRGAN</a> (основа <a href="https://github.com/upscayl/upscayl">Upscayl</a>) · PDF: <a href="https://github.com/parallax/jsPDF">jsPDF</a> · Обработка идёт на вашей видеокарте, файлы никуда не отправляются.</footer>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.20.1/dist/ort.webgpu.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
