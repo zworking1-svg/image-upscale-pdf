@@ -1,0 +1,248 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Улучшение и печать</title>
+<style>
+  :root {
+    --bg: #f4f2ee; --card: #ffffff; --ink: #1d1d1f; --muted: #6b6b70; --line: #e3e0da;
+    --accent: #c2410c; --accent-ink: #fff; --ok: #15803d; --warn: #b45309; --err: #b91c1c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151517; --card: #1f1f22; --ink: #f2f2f3; --muted: #9a9aa2; --line: #2e2e33;
+            --accent: #f97316; --accent-ink: #1a0d04; --ok: #4ade80; --warn: #fbbf24; --err: #f87171; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 16px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: -.01em; }
+  .sub { color: var(--muted); margin: 0 0 28px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 22px; margin-bottom: 18px; }
+  .card.disabled { opacity: .45; pointer-events: none; }
+  .step { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 18px; }
+  .num { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: var(--accent-ink);
+         display: grid; place-items: center; font-weight: 700; font-size: 14px; flex: none; }
+  .drop { border: 2px dashed var(--line); border-radius: 12px; padding: 36px 16px; text-align: center; cursor: pointer;
+          transition: border-color .15s, background .15s; }
+  .drop.over, .drop:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+  .drop b { color: var(--accent); }
+  .muted { color: var(--muted); font-size: 14px; }
+  label { display: block; font-size: 14px; color: var(--muted); margin-bottom: 4px; }
+  select, input[type=number] { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line);
+          background: var(--bg); color: var(--ink); font: inherit; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; margin-bottom: 16px; }
+  button { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 10px; padding: 12px 22px;
+           font: inherit; font-weight: 600; cursor: pointer; }
+  button:disabled { opacity: .5; cursor: default; }
+  a.btn2 { display: inline-block; padding: 11px 18px; border-radius: 10px; border: 1px solid var(--line);
+           color: var(--ink); text-decoration: none; font-weight: 600; }
+  .row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
+  .bar { height: 10px; background: var(--line); border-radius: 99px; overflow: hidden; margin: 14px 0 6px; }
+  .bar > i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .3s; }
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+  @media (max-width: 640px) { .compare { grid-template-columns: 1fr; } }
+  figure { margin: 0; }
+  figure img { width: 100%; border-radius: 10px; border: 1px solid var(--line); background: var(--bg); display: block; }
+  figcaption { font-size: 14px; color: var(--muted); margin-top: 6px; }
+  .dpi { padding: 12px 14px; border-radius: 10px; background: var(--bg); font-size: 15px; margin-bottom: 16px; }
+  .ok { color: var(--ok); } .warn { color: var(--warn); } .err { color: var(--err); }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Улучшение картинки и PDF для печати</h1>
+  <p class="sub">Загрузите картинку → увеличьте в 4 раза нейросетью Upscayl → получите PDF формата A3 для типографии.</p>
+
+  <section class="card" id="s1">
+    <h2 class="step"><span class="num">1</span>Загрузите картинку</h2>
+    <div class="drop" id="drop">
+      <div>Перетащите файл сюда или <b>выберите на компьютере</b></div>
+      <div class="muted">JPG, PNG, WEBP, BMP, TIFF, GIF · до 200 МБ</div>
+    </div>
+    <input type="file" id="file" accept="image/*" hidden>
+    <p class="muted hidden" id="uploadInfo"></p>
+  </section>
+
+  <section class="card disabled" id="s2">
+    <h2 class="step"><span class="num">2</span>Увеличьте в 4 раза</h2>
+    <div class="grid">
+      <div>
+        <label for="model">Модель нейросети</label>
+        <select id="model">
+          {% for key, title in models.items() %}<option value="{{ key }}">{{ title }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+    <button id="upBtn">Улучшить ×4</button>
+    <div id="progressWrap" class="hidden">
+      <div class="bar"><i id="bar"></i></div>
+      <div class="muted" id="progressText">Обработка…</div>
+    </div>
+    <p class="err hidden" id="upErr"></p>
+    <div class="compare">
+      <figure><img id="imgBefore" alt="" class="hidden"><figcaption id="capBefore"></figcaption></figure>
+      <figure><img id="imgAfter" alt="" class="hidden"><figcaption id="capAfter"></figcaption></figure>
+    </div>
+    <div class="row hidden" id="dlRow" style="margin-top:14px">
+      <a class="btn2" id="dlPng" href="#">Скачать увеличенный PNG</a>
+    </div>
+  </section>
+
+  <section class="card disabled" id="s3">
+    <h2 class="step"><span class="num">3</span>Конвертируйте в PDF</h2>
+    <div class="grid">
+      <div>
+        <label for="paper">Формат листа</label>
+        <select id="paper">
+          {% for key, size in page_sizes.items() %}<option value="{{ key }}" {% if key == 'A3' %}selected{% endif %}>{{ key }} — {{ size[0] }}×{{ size[1] }} мм</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label for="orientation">Ориентация</label>
+        <select id="orientation">
+          <option value="auto">Автоматически (по картинке)</option>
+          <option value="portrait">Книжная</option>
+          <option value="landscape">Альбомная</option>
+        </select>
+      </div>
+      <div>
+        <label for="fit">Размещение</label>
+        <select id="fit">
+          <option value="into">Вписать целиком (без обрезки)</option>
+          <option value="fill">Заполнить лист (с обрезкой краёв)</option>
+          <option value="exact">Растянуть на весь лист</option>
+        </select>
+      </div>
+      <div>
+        <label for="margin">Поля, мм</label>
+        <input type="number" id="margin" value="0" min="0" max="50" step="1">
+      </div>
+      <div>
+        <label for="quality">Качество в PDF</label>
+        <select id="quality">
+          <option value="jpeg">JPEG 95% — отличное, файл меньше</option>
+          <option value="png">PNG — без потерь, файл больше</option>
+        </select>
+      </div>
+      <div>
+        <label for="source">Источник</label>
+        <select id="source">
+          <option value="upscaled">Увеличенная картинка</option>
+          <option value="original">Оригинал (без увеличения)</option>
+        </select>
+      </div>
+    </div>
+    <div class="dpi" id="dpi"></div>
+    <button id="pdfBtn">Скачать PDF</button>
+    <p class="err hidden" id="pdfErr"></p>
+  </section>
+</main>
+
+<script>
+const PAGES = {{ page_sizes | tojson }};
+const $ = id => document.getElementById(id);
+let jobId = null, origSize = null, upSize = null;
+
+const drop = $('drop'), fileInput = $('file');
+drop.onclick = () => fileInput.click();
+drop.ondragover = e => { e.preventDefault(); drop.classList.add('over'); };
+drop.ondragleave = () => drop.classList.remove('over');
+drop.ondrop = e => { e.preventDefault(); drop.classList.remove('over'); if (e.dataTransfer.files[0]) upload(e.dataTransfer.files[0]); };
+fileInput.onchange = () => fileInput.files[0] && upload(fileInput.files[0]);
+
+function show(el, on = true) { el.classList.toggle('hidden', !on); }
+function enable(id, on = true) { $(id).classList.toggle('disabled', !on); }
+
+async function upload(file) {
+  const info = $('uploadInfo');
+  show(info); info.className = 'muted'; info.textContent = 'Загрузка ' + file.name + '…';
+  enable('s2', false); enable('s3', false);
+  show($('imgAfter'), false); $('capAfter').textContent = ''; show($('dlRow'), false); upSize = null;
+  const fd = new FormData(); fd.append('image', file);
+  const r = await fetch('/api/upload', { method: 'POST', body: fd });
+  const j = await r.json().catch(() => ({ error: 'Ошибка сервера' }));
+  if (!r.ok) { info.className = 'err'; info.textContent = j.error; return; }
+  jobId = j.id; origSize = j.size;
+  info.textContent = `${file.name} · ${origSize[0]}×${origSize[1]} px → после увеличения ${origSize[0]*4}×${origSize[1]*4} px`;
+  $('imgBefore').src = j.preview; show($('imgBefore'));
+  $('capBefore').textContent = `Оригинал · ${origSize[0]}×${origSize[1]} px`;
+  enable('s2'); enable('s3');
+  $('source').value = 'original'; updateDpi();
+}
+
+$('upBtn').onclick = async () => {
+  $('upBtn').disabled = true; show($('upErr'), false); show($('progressWrap'));
+  $('bar').style.width = '0%'; $('progressText').textContent = 'Запуск нейросети…';
+  const r = await fetch('/api/upscale/' + jobId, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model: $('model').value }) });
+  if (!r.ok) { const j = await r.json(); fail(j.error); return; }
+  poll();
+};
+
+function fail(msg) {
+  $('upBtn').disabled = false; show($('progressWrap'), false);
+  $('upErr').textContent = msg; show($('upErr'));
+}
+
+async function poll() {
+  const j = await (await fetch('/api/job/' + jobId)).json();
+  if (j.status === 'running') {
+    $('bar').style.width = j.progress + '%';
+    $('progressText').textContent = `Обработка… ${j.progress.toFixed(1)}%`;
+    setTimeout(poll, 700); return;
+  }
+  if (j.status === 'error') { fail(j.error); return; }
+  $('bar').style.width = '100%'; $('progressText').textContent = 'Готово!';
+  $('upBtn').disabled = false;
+  upSize = j.upscaled_size;
+  $('imgAfter').src = j.preview + '?t=' + Date.now(); show($('imgAfter'));
+  $('capAfter').textContent = `Увеличено ×4 · ${upSize[0]}×${upSize[1]} px`;
+  $('dlPng').href = j.download; show($('dlRow'));
+  $('source').value = 'upscaled'; updateDpi();
+}
+
+function updateDpi() {
+  const el = $('dpi');
+  const size = $('source').value === 'upscaled' ? upSize : origSize;
+  if (!size) { el.innerHTML = '<span class="warn">Сначала увеличьте картинку (шаг 2) — или выберите источник «Оригинал».</span>'; return; }
+  let [pw, ph] = PAGES[$('paper').value];
+  const o = $('orientation').value;
+  if (o === 'landscape' || (o === 'auto' && size[0] > size[1])) [pw, ph] = [ph, pw];
+  const m = Math.max(0, +$('margin').value || 0);
+  const wIn = (pw - 2*m) / 25.4, hIn = (ph - 2*m) / 25.4;
+  const fit = $('fit').value;
+  let dpi;
+  if (fit === 'into') dpi = Math.min(size[0] / wIn, size[1] / hIn);
+  else if (fit === 'fill') dpi = Math.max(size[0] / wIn, size[1] / hIn);
+  else dpi = Math.min(size[0] / wIn, size[1] / hIn);
+  dpi = Math.round(dpi);
+  let verdict;
+  if (dpi >= 300) verdict = '<span class="ok">✓ Отлично для типографии (300+ DPI)</span>';
+  else if (dpi >= 200) verdict = '<span class="warn">Хорошо — печать будет качественной, но не идеальной</span>';
+  else verdict = '<span class="err">Низкое разрешение — на печати будет заметна размытость</span>';
+  el.innerHTML = `Лист ${pw}×${ph} мм · разрешение при печати ≈ <b>${dpi} DPI</b> · ${verdict}`;
+}
+['paper', 'orientation', 'fit', 'margin', 'source'].forEach(id => $(id).addEventListener('input', updateDpi));
+
+$('pdfBtn').onclick = async () => {
+  const btn = $('pdfBtn'); btn.disabled = true; btn.textContent = 'Создаю PDF…'; show($('pdfErr'), false);
+  try {
+    const r = await fetch('/api/pdf/' + jobId, { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ paper: $('paper').value, orientation: $('orientation').value, fit: $('fit').value,
+        margin_mm: +$('margin').value || 0, quality: $('quality').value, source: $('source').value }) });
+    if (!r.ok) { const j = await r.json().catch(() => ({ error: 'Ошибка сервера' })); throw new Error(j.error); }
+    const blob = await r.blob();
+    const name = (r.headers.get('Content-Disposition') || '').match(/filename\*?=(?:UTF-8'')?"?([^";]+)/i);
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = name ? decodeURIComponent(name[1]) : 'print.pdf';
+    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+  } catch (e) { $('pdfErr').textContent = e.message; show($('pdfErr')); }
+  btn.disabled = false; btn.textContent = 'Скачать PDF';
+};
+</script>
+</body>
+</html>

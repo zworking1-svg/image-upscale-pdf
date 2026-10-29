@@ -1,0 +1,5 @@
+.venv/
+work/
+vendor/
+__pycache__/
+*.pyc
